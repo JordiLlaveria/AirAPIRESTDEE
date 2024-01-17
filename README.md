@@ -6,7 +6,7 @@
 2. [Requirements](#requirements)
 3. [Installation](#installation)
 4. [Local set up](#local-set-up)
-5. [RPi set up](#production-set-up)
+5. [RPi set up](#rpi-set-up)
 6. [Endpoints](#endpoints)
 
 ## Introduction
