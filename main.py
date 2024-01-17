@@ -58,56 +58,10 @@ def on_message(client, userdata, msg):
 client.on_connect = on_connect
 client.on_message = on_message
 
-@app.get("/connect")
-async def connect_to_broker():
-    global is_connected
-    try:
-        client.connect("localhost", 8000, 10)
-        client.loop_start()
-        client.publish("WebApp/autopilotService/connect")
-        await asyncio.sleep(2)
-        if not is_connected:
-            raise HTTPException(status_code=503, detail="Connection failed. No telemetryInfo message received.")
-        return {"message": "Successfully connected to the broker."}
-    except HTTPException as e:
-        raise e
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
-
-@app.get("/disconnect")
-async def disconnect_from_broker():
-    global is_connected
-    try:
-        client.publish("WebApp/autopilotService/disconnect")
-        client.loop_stop()
-        client.disconnect()
-        is_connected = False
-        return {"message": "Successfully disconnected from the broker."}
-    except Exception as e:
-        raise HTTPException(status_code=400, detail=str(e))
-
 @app.get("/connection_status")
 async def get_connection_status():
     global is_connected
     return {"is_connected": is_connected}
-
-@app.post("/executeFlightPlan")
-async def execute_flight_plan(plan: List[WaypointMQTT]):
-    # Convert the FlightPlan to a JSON string
-    plan_json = json.dumps(jsonable_encoder(plan))
-
-    # Publish the plan to the MQTT broker
-    client.publish("WebApp/autopilotService/executeFlightPlan", plan_json)
-    return {"message": "Flight plan published"}
-# End MQTT Callbacks
-
-@app.get("/get_results_flight_flutter/{flight_id}")
-async def get_results_flight_flutter(flight_id: str):
-    client.publish("WebApp/cameraService/getResultFlightFlutter", flight_id)
-    return {"message": "Trying to obtain images and pictures"}
-
-###### Hasta aqui el código específico para la aplicación movil en flutter #############
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request, exc):
@@ -132,51 +86,9 @@ async def http_exception_handler(request, exc):
         ),
     )
 
-
-
 @app.get("/")
 def home():
     return RedirectResponse(url="/docs")
-
-"""
-@app.get("/get_all_flights")
-def get_all_flights():
-    flights = Flights.objects()
-    flights_data = []
-
-    for flight in flights:
-        individual_flight = json.loads(flight.to_json())
-
-        # Populate related documents
-        individual_flight["FlightPlan"] = json.loads(flight.FlightPlan.to_json())
-
-        # Pictures
-        #pictures = []
-        #for picture in individual_flight["Pictures"]:
-            #picture["lat"]=individual_flight["lat"]
-            #picture["lon"]=individual_flight["lon"]
-
-            #pic = Picture.objects.get(picture)
-            #pictures.append(picture())
-            #pic_name = picture["namePicture"]
-            #pictures.append(pic_name)
-        #individual_flight["Pictures"] = pictures
-
-        # Videos
-        #videos = []
-        #for video in individual_flight["Videos"]:
-            #vid = Video.objects.get(nameVideo=video["nameVideo"])
-            #video1 = video.to_json()
-            #videos.append(json.loads(video.to_json()))
-            #vid_name = video["nameVideo"]
-            #videos.append(vid_name)
-        #individual_flight["Videos"] = videos
-
-        flights_data.append(individual_flight)
-
-    return flights_data
-
-"""
 
 @app.post("/add_flightplan", responses={422: {"model": ErrorResponse}})
 def add_flightplan(data: FlightPlanData):
@@ -243,33 +155,6 @@ def add_flight(data: FlightData):
                             NumPics=pics)
         new_flight.save()
         id_flight = str(new_flight.id)
-
-        # Inserto el flightplan en el dron sin comprobar o no si ya existe
-        #client = MongoClient('192.168.208.5:27017')  # Ip de aire
-        #db = client['DEE']
-        #collection = db['flightPlan']
-        """
-        #collection.insert_one(flightplan)
-        # Voy a buscar el flightplan en el dron, y si no está disponible, lo voy a cargar desde la Api de tierra
-        client = MongoClient('192.168.208.5:27017') # Ip del dron
-        db = client['DEE']
-        collection = db['flightPlan']
-
-        flightplan = collection.find_one({"_id": ObjectId(flightplan)})
-        if not flightplan:
-            # Me conecto a la Api de tierra para poder enviar el flightplan a la Api de Aire
-            client = MongoClient('147.83.249.79:8105')  # Ip de tierra
-            db = client['DEE']
-            collection = db['flightPlan']
-
-            flightplan = collection.find_one({"_id": ObjectId(flightplan)})
-
-            client = MongoClient('192.168.208.5:27017')  # Ip de aire
-            db = client['DEE']
-            collection = db['flightPlan']
-
-            collection.insert_one(flightplan)
-        """
         return {"success": True, "message": "Waypoints Saved", "id": id_flight}
 
     except Exception as e:
@@ -284,7 +169,6 @@ def get_flightplan_id(flight_id: str):
 
         flight = collection.find_one({"_id": ObjectId(flight_id)})
         flightplan_id = str(flight["FlightPlan"])
-        #client.close()
         return ({"FlightPlan id": flightplan_id})
     except Exception as e:
         raise HTTPException(status_code=400, detail={str(e)})
@@ -300,7 +184,6 @@ def get_flight_plan(flightplan_title: str):
         flightplan = collection.find_one({"Title": flightplan_title})
         if flightplan is None:
             return JSONResponse(content=flightplan, status_code=404)
-            #raise HTTPException(status_code=404, detail={"FlightPlan no encontrado"})
         else:
             flightplan["_id"] = str(flightplan["_id"])
             flightplan["DateAdded"] = flightplan["DateAdded"].isoformat()
@@ -336,9 +219,7 @@ def get_pic_interval(flightplan_id: str):
 
         flightplan = collection.find_one({"_id": ObjectId(flightplan_id)})
         pic_Interval = flightplan["PicInterval"]
-        #client.close()
         return {"Pic interval": pic_Interval}
-        #return JSONResponse(content=flightplan, status_code=200)
     except Exception as e:
         raise HTTPException(status_code=400, detail={str(e)})
 
@@ -351,9 +232,7 @@ def get_vid_interval(flightplan_id: str):
 
         flightplan = collection.find_one({"_id": ObjectId(flightplan_id)})
         vid_Interval = flightplan["VidTimeStatic"]
-        #client.close()
         return {"Vid interval": vid_Interval}
-        #return JSONResponse(content=flightplan, status_code=200)
     except Exception as e:
         raise HTTPException(status_code=400, detail={str(e)})
 
@@ -376,8 +255,6 @@ async def add_video(data: NewVideo):
         flightplan = collection.find_one({"_id": ObjectId(flight_id)})
 
         if flightplan:
-            #picture_data = Picture(NamePicture=name_picture)
-            #picture_data_dict = picture_data
             flightplan["Videos"].append({
                 "startWaypoint": startVideo,
                 "endWaypoint": endVideo,
@@ -388,7 +265,6 @@ async def add_video(data: NewVideo):
                 "lonEnd": lonEndVideo})
             collection.replace_one({"_id": ObjectId(flightplan["_id"])}, flightplan)
             return {"success": True, "message": "Video saved"}
-        #client.close()
     except Exception as e:
         raise HTTPException(status_code=400, detail={str(e)})
 
@@ -407,8 +283,6 @@ async def add_picture(data: NewPicture):
         flightplan = collection.find_one({"_id": ObjectId(flight_id)})
 
         if flightplan:
-            #picture_data = Picture(NamePicture=name_picture)
-            #picture_data_dict = picture_data
             flightplan["Pictures"].append({
                 "waypoint": data.waypoint,
                 "namePicture": name_picture,
@@ -416,7 +290,6 @@ async def add_picture(data: NewPicture):
                 "lon": lon_image})
             collection.replace_one({"_id": ObjectId(flightplan["_id"])}, flightplan)
             return {"success": True, "message": "Picture saved"}
-        #client.close()
     except Exception as e:
         raise HTTPException(status_code=400, detail={str(e)})
 
@@ -430,107 +303,12 @@ def get_results_flight(flight_id: str):
         flight = collection.find_one({"_id": ObjectId(flight_id)})
         videos = flight["Videos"]
         pictures = flight["Pictures"]
-
-        #Lo que vamos a hacer ahora es guardar el vuelo en la Api de tierra, para que esta información sea accesible una vez desactivado el dron
-        #client = MongoClient('147.83.249.79:8105') #Hace falta la IP de la Api de tierra
-        #db = client['DEE']
-        #collection = db['flights']
-        #collection.insert_one(flight)
-
-        #client.close()
         return ({"Videos": videos, "Pictures": pictures})
     except Exception as e:
         raise HTTPException(status_code=400, detail={str(e)})
-
-"""
-@app.post("/save_picture/{picture_name}")
-async def save_picture(picture_name: str, request: Request):
-    try:
-        #client = MongoClient('127.0.0.1:27017')
-        #db = client['DEE']
-        #collection = db['flights']
-
-        data_bytes = await request.body()
-
-
-        #with open("media/pictures/" + picture_name, "wb") as f:
-        #    f.write(body)
-
-
-        #with open("media/pictures/" + picture_name, "wb") as buffer:
-        #    buffer.write(file.read())
-
-        #datos = request.body()
-
-        actual_dir = os.path.dirname(os.path.abspath(__file__))
-        img_route = os.path.join(actual_dir, "media", "videos", picture_name)
-        #img_route = "E:\TFG\Alejandro Final\APIRESTDEE/media/pictures/" + picture_name
-        nparr = np.frombuffer(data_bytes, np.uint8)
-        image = cv.imdecode(nparr, cv.IMREAD_COLOR)
-        try:
-            cv.imwrite(img_route, image)
-        except Exception as e:
-            print(f"Error al guardar la imagen: {e}")
-        cv.waitKey(0)
-        #print('Imagen recibida y guardada en:', img_route)
-
-
-    except Exception as e:
-        raise HTTPException(status_code=400, detail={str(e)})
-
-@app.post("/save_video/{video_name}")
-async def save_video(video_name: str, request: Request):
-    try:
-        data_bytes = await request.body()
-
-        actual_dir = os.path.dirname(os.path.abspath(__file__))
-        vid_route = os.path.join(actual_dir, "media", "videos", video_name)
-        #vid_route = "E:\TFG\Alejandro Final\APIRESTDEE/media/videos/" + video_name
-
-        try:
-            with open(vid_route, 'wb') as file:
-                file.write(data_bytes)
-        except Exception as e:
-            print(f"Error al guardar el video: {e}")
-        cv.waitKey(0)
-        #print('Video recibido y guardado en:', vid_route)
-
-    except Exception as e:
-        raise HTTPException(status_code=400, detail={str(e)})
-"""
 
 @app.get("/get_all_flightPlans")
 def get_all_flightPlans():
     waypoints = json.loads(FlightPlan.objects().to_json())
     return {"Waypoints": waypoints}
-
-"""
-# Serve media files
-directory_path = os.path.join(os.path.dirname(__file__), "media")
-app.mount("/media", StaticFiles(directory=directory_path), name="media")
-
-@app.get("/media/pictures/{file_name}")
-async def get_picture(file_name: str):
-    return FileResponse(os.path.join("media", "pictures", file_name))
-
-@app.get("/media/videos/{file_name}")
-async def get_video(file_name: str):
-    return FileResponse(os.path.join("media", "videos", file_name))
-
-
-@app.get("/thumbnail/{file_name}")
-async def get_video_thumbnail(file_name: str):
-    # Load the video
-    video = VideoFileClip(f"media/videos/{file_name}")
-
-    thumbnail = video.get_frame(0)
-    img = Image.fromarray(np.uint8(thumbnail))
-
-    image_io = BytesIO()
-    img.save(image_io, format='JPEG')
-    image_io.seek(0)
-
-    return StreamingResponse(image_io, media_type="image/jpeg")
-
-"""
 
