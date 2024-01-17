@@ -29,7 +29,6 @@ Before starting with the installation, make sure you have the following software
 - MongoDB Compass (optional, but recommended for easier database management)
 - PuTTY (in the case of executing the APIREST module in the RPi)
 - Docker Desktop
-- PuTTY
 - PyCharm (or any preferred IDE)
 
 ## Installation
